@@ -21,12 +21,16 @@ import {
   HARD_DROP_SCORE,
   LINES_PER_LEVEL,
   CLEAR_ANIM_MS,
-  DIFFICULTIES,
+  MIN_START_LEVEL,
+  MAX_START_LEVEL,
   dropInterval,
   STORAGE_KEYS
 } from './constants.js'
 
 export function useTetris(audio) {
+  // 起始等级（界面中的 Start Line），从本地配置读取。
+  const savedStartLevel = Number(localStorage.getItem(STORAGE_KEYS.startLevel) || 0)
+
   // ---------------- 响应式状态 ----------------
   const state = reactive({
     board: createBoard(), // 已堆叠的棋盘
@@ -34,10 +38,9 @@ export function useTetris(audio) {
     next: null, // 下一个方块类型（预览）
     status: 'idle', // idle | playing | paused | gameover
     score: 0,
-    level: 1,
+    level: savedStartLevel, // 当前等级（待机时等于起始等级）
     lines: 0,
-    startLevel: 1,
-    difficulty: localStorage.getItem(STORAGE_KEYS.difficulty) || 'easy',
+    startLevel: savedStartLevel, // 可在未开始时调整并持久化
     clearing: null, // 消行动画状态 {rows:[], start:时间戳}
     highScore: Number(localStorage.getItem(STORAGE_KEYS.highScore) || 0)
   })
@@ -199,21 +202,13 @@ export function useTetris(audio) {
     lock()
   }
 
-  // 计算幽灵落点行（供渲染层绘制落地阴影）。
-  function getGhostY() {
-    if (!state.current) return null
-    return calcGhostY(state.board, state.current)
-  }
-
-  // 开始 / 重新开始游戏。
-  function start(difficulty = state.difficulty) {
-    state.difficulty = difficulty
-    localStorage.setItem(STORAGE_KEYS.difficulty, difficulty)
-    const startLevel = (DIFFICULTIES[difficulty] || DIFFICULTIES.easy).startLevel
+  // 开始 / 重新开始游戏（startLevel 即界面的 Start Line）。
+  function start(startLevel = state.startLevel) {
+    state.startLevel = startLevel
+    localStorage.setItem(STORAGE_KEYS.startLevel, String(startLevel))
     state.board = createBoard()
     state.score = 0
     state.lines = 0
-    state.startLevel = startLevel
     state.level = startLevel
     state.clearing = null
     queue = createBag()
@@ -221,6 +216,15 @@ export function useTetris(audio) {
     lastTime = performance.now()
     state.status = 'playing'
     spawn()
+  }
+
+  // 调整起始等级（仅在未开始 / 已结束时可改），并持久化。
+  function changeStartLevel(delta) {
+    if (state.status === 'playing' || state.status === 'paused') return
+    const next = Math.min(MAX_START_LEVEL, Math.max(MIN_START_LEVEL, state.startLevel + delta))
+    state.startLevel = next
+    state.level = next
+    localStorage.setItem(STORAGE_KEYS.startLevel, String(next))
   }
 
   // 暂停 / 继续切换。
@@ -234,7 +238,19 @@ export function useTetris(audio) {
   }
 
   function restart() {
-    start(state.difficulty)
+    start(state.startLevel)
+  }
+
+  // 复位：回到待机（开机）画面，保留起始等级设置。
+  function reset() {
+    state.status = 'idle'
+    state.board = createBoard()
+    state.current = null
+    state.next = null
+    state.score = 0
+    state.lines = 0
+    state.level = state.startLevel
+    state.clearing = null
   }
 
   // ---------------- 生命周期 ----------------
@@ -247,13 +263,14 @@ export function useTetris(audio) {
   return {
     state,
     start,
+    reset,
+    changeStartLevel,
     togglePause,
     restart,
     moveLeft,
     moveRight,
     rotate,
     softDrop,
-    hardDrop,
-    getGhostY
+    hardDrop
   }
 }

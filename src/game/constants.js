@@ -48,17 +48,6 @@ export const SHAPES = {
   ]
 }
 
-// 每种方块的专属配色（填充色），描边色在渲染层统一处理。
-export const COLORS = {
-  I: '#22d3ee', // 青
-  O: '#fde047', // 黄
-  T: '#a855f7', // 紫
-  S: '#4ade80', // 绿
-  Z: '#f87171', // 红
-  J: '#60a5fa', // 蓝
-  L: '#fb923c' // 橙
-}
-
 export const TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L']
 
 // ------------------------------------------------------------
@@ -121,21 +110,18 @@ export const LINES_PER_LEVEL = 10
 // 消行闪烁动画时长（毫秒），动画期间冻结重力。
 export const CLEAR_ANIM_MS = 220
 
-// 难度 → 起始等级映射（起始等级越高，初始下落越快）。
-export const DIFFICULTIES = {
-  easy: { label: '简单', startLevel: 1 },
-  normal: { label: '普通', startLevel: 4 },
-  hard: { label: '困难', startLevel: 7 }
-}
+// 起始等级（Start Line）可选范围：0 ~ 9，等级越高初始下落越快。
+export const MIN_START_LEVEL = 0
+export const MAX_START_LEVEL = 9
 
 // 根据等级计算自动下落间隔（毫秒）。等级越高间隔越短，最快不低于 80ms。
 export function dropInterval(level) {
-  return Math.max(1000 - (level - 1) * 80, 80)
+  return Math.max(1000 - level * 80, 80)
 }
 
 // localStorage 持久化键名
 export const STORAGE_KEYS = {
   highScore: 'tetris.highScore',
   sound: 'tetris.sound',
-  difficulty: 'tetris.difficulty'
+  startLevel: 'tetris.startLevel'
 }

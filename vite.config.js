@@ -4,7 +4,7 @@ import { VitePWA } from "vite-plugin-pwa";
 
 // 部署到 GitHub Pages 等子路径时可改为 './'，纯根路径部署保持 '/'
 export default defineConfig({
-  base: "./",
+  base: process.env.GITHUB_ACTIONS ? "/TetrisPure/" : "./",
   plugins: [
     vue(),
     // PWA：仅做离线缓存（Service Worker 预缓存静态资源），不提供桌面安装能力。
@@ -17,5 +17,4 @@ export default defineConfig({
       },
     }),
   ],
-  base: process.env.GITHUB_ACTIONS ? "/TetrisPure/" : "/",
 });

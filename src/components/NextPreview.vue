@@ -1,44 +1,50 @@
 <script setup>
 // ============================================================
-// 下一方块预览（渲染层）
-// 监听逻辑层的 next 类型，在小画布中居中绘制对应方块。
+// 下一方块预览（渲染层）— 单色 LCD 砖块风格
+// 监听逻辑层 next 类型，在小画布中居中绘制对应方块。
 // ============================================================
 import { ref, watch, onMounted } from 'vue'
-import { SHAPES, COLORS } from '../game/constants.js'
+import { SHAPES } from '../game/constants.js'
 
 const props = defineProps({
   next: { type: String, default: null } // 下一方块类型
 })
 
-const CELL = 22
-const SIZE = 4 * CELL // 4×4 预览区域
+const CELL = 13
+const COLS_N = 4
+const W = COLS_N * CELL
+const H = 2 * CELL // 预览仅需 2 行高度即可容纳所有方块横放形态
+const LCD_ON = '#2b3010'
+
 const canvasRef = ref(null)
 let ctx = null
 
-// 绘制预览：清空后将方块矩阵居中渲染。
+// 绘制单个砖块（与主画布一致的外圈 + 中心点样式）。
+function drawBrick(x, y) {
+  const s = CELL
+  ctx.fillStyle = LCD_ON
+  ctx.fillRect(x + 1, y + 1, s - 2, s - 2)
+  ctx.fillStyle = '#9aa97a'
+  ctx.fillRect(x + 3, y + 3, s - 6, s - 6)
+  ctx.fillStyle = LCD_ON
+  ctx.fillRect(x + 4, y + 4, s - 8, s - 8)
+}
+
 function draw() {
   if (!ctx) return
-  ctx.clearRect(0, 0, SIZE, SIZE)
+  ctx.clearRect(0, 0, W, H)
   if (!props.next) return
 
+  // 取方块矩阵中实际占用的行（忽略 SHAPES 中的空白行），使预览紧凑居中。
   const matrix = SHAPES[props.next]
-  const color = COLORS[props.next]
-  const n = matrix.length
-  // 居中偏移（以格为单位）
-  const offset = (4 - n) / 2
+  const rows = matrix.filter((row) => row.some((v) => v))
+  const widthCells = matrix[0].length
+  const offsetX = (COLS_N - widthCells) / 2
+  const offsetY = (2 - rows.length) / 2
 
-  for (let r = 0; r < n; r++) {
-    for (let c = 0; c < n; c++) {
-      if (!matrix[r][c]) continue
-      const x = (offset + c) * CELL
-      const y = (offset + r) * CELL
-      ctx.fillStyle = color
-      ctx.fillRect(x, y, CELL, CELL)
-      ctx.fillStyle = 'rgba(255,255,255,0.25)'
-      ctx.fillRect(x, y, CELL, 3)
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)'
-      ctx.lineWidth = 1
-      ctx.strokeRect(x + 0.5, y + 0.5, CELL - 1, CELL - 1)
+  for (let r = 0; r < rows.length; r++) {
+    for (let c = 0; c < widthCells; c++) {
+      if (rows[r][c]) drawBrick((offsetX + c) * CELL, (offsetY + r) * CELL)
     }
   }
 }
@@ -51,10 +57,5 @@ onMounted(() => {
 </script>
 
 <template>
-  <canvas
-    ref="canvasRef"
-    :width="SIZE"
-    :height="SIZE"
-    class="rounded-md bg-slate-900/60 ring-1 ring-white/10"
-  ></canvas>
+  <canvas ref="canvasRef" :width="W" :height="H" class="block"></canvas>
 </template>
