@@ -153,19 +153,20 @@ onUnmounted(() => {
   <div class="min-h-screen bg-slate-200 flex items-center justify-center p-4 select-none">
     <!-- 掌机机身 -->
     <div class="tetris-body">
-      <!-- 屏幕区：黑色相框（顶部标题条 + 灰色立体内框 + 绿屏）；方块装饰位于两侧黄色机身上 -->
+      <!-- 屏幕区：两侧方块装饰（机身黄底上）夹着黑色描边相框；相框内仅含标题条 + 灰色内框绿屏，贴合官方 -->
       <div class="screen-row">
         <BezelDecor :height="360" />
 
+        <!-- 黑色描边相框：仅含顶部标题条 + 灰色内框绿屏（不含两侧装饰） -->
         <div class="bezel">
-          <!-- 黑框顶部标题条：圆点 + 标题，浅色字显示在黑底上 -->
+          <!-- 顶部标题条：两侧虚线（与边框同粗、连接到上方两角）+ 居中标题，深色显示在机身黄底上 -->
           <div class="title-bar">
-            <span class="title-dots">■ ■ ■</span>
+            <span class="title-dash"></span>
             <h1 class="title-text">Good Old Tetris</h1>
-            <span class="title-dots">■ ■ ■</span>
+            <span class="title-dash"></span>
           </div>
 
-          <!-- 灰色立体内框：黑框与绿屏之间的银灰色斜角边框 -->
+          <!-- 灰色立体内框：机身与绿屏之间的银灰色斜角边框 -->
           <div class="inner-frame">
           <!-- LCD 绿屏：左侧游戏区 + 右侧信息面板 -->
           <div class="screen">
@@ -313,14 +314,15 @@ onUnmounted(() => {
   max-width: 100%;
   padding: 16px;
   border-radius: 26px;
-  background: linear-gradient(160deg, #ffd633 0%, #f4c30f 55%, #e8b400 100%);
+  background: linear-gradient(160deg, #ffd633 0%, #f4c30f 55%, #EFCC19 100%);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35), inset 0 2px 6px rgba(255, 255, 255, 0.5);
 }
 
-.title-dots {
-  letter-spacing: 2px;
-  font-size: 10px;
-  color: #f1ead0;
+/* 标题两侧短虚线点缀：小方块短划，居中聚拢在标题两旁 */
+.title-dash {
+  width: 38px;
+  height: 6px;
+  background: repeating-linear-gradient(90deg, #141414 0 6px, transparent 6px 12px);
 }
 
 /* 屏幕区：左装饰列 + 黑框绿屏 + 右装饰列 横向排列 */
@@ -330,27 +332,30 @@ onUnmounted(() => {
   justify-content: center;
   gap: 6px;
 }
-/* 黑色相框：包裹标题条 + 灰色内框 + 绿屏，加粗、圆角更明显 */
+/* 黑色相框：四周圆角描边（机身黄底透出），带轻微立体投影与内高光，质感更精致 */
 .bezel {
-  padding: 14px;
-  background: #111;
-  border-radius: 24px;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6), 0 3px 5px rgba(0, 0, 0, 0.35);
+  padding: 8px 14px 14px;
+  background: transparent;
+  border: 6px solid #141414;
+  border-radius: 16px;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
-/* 黑框顶部标题条：圆点 + 标题居中 */
+/* 顶部标题条：居中标题，两侧短虚线点缀 */
 .title-bar {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 10px;
+  margin: 2px 0 8px;
 }
 .title-text {
   font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: #f1ead0;
+  color: #141414;
 }
 
 /* 灰色立体内框：银灰色斜角边框，营造绿屏内嵌的立体感 */
