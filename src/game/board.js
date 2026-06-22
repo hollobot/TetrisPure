@@ -1,11 +1,24 @@
 // ============================================================
 // 棋盘与方块的纯函数工具集（无状态、无副作用，便于复用与测试）
 // ============================================================
-import { COLS, ROWS, SHAPES, TYPES, getKicks } from './constants.js'
+import { COLS, ROWS, SHAPES, TYPES, GARBAGE, getKicks } from './constants.js'
 
 // 创建空棋盘：ROWS×COLS 的二维数组，每格为 null（空）或方块类型字符串。
 export function createBoard() {
   return Array.from({ length: ROWS }, () => Array(COLS).fill(null))
+}
+
+// 创建带「起始行高」的棋盘：底部预填 lines 行垃圾方块，每行随机留 1 个缺口（不会自动消除）。
+// lines 会被限制在 [0, ROWS-1]，至少保留 1 行空间。
+export function createBoardWithGarbage(lines) {
+  const board = createBoard()
+  const n = Math.max(0, Math.min(lines, ROWS - 1))
+  for (let i = 0; i < n; i++) {
+    const row = board[ROWS - 1 - i]
+    const gap = Math.floor(Math.random() * COLS) // 每行独立的随机缺口列
+    for (let c = 0; c < COLS; c++) row[c] = c === gap ? null : GARBAGE
+  }
+  return board
 }
 
 // 深拷贝一个矩阵（旋转时避免污染原始 SHAPES 数据）。

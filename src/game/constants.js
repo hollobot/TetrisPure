@@ -50,6 +50,9 @@ export const SHAPES = {
 
 export const TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L']
 
+// 开局预填「垃圾行」使用的格子标记：非空即被渲染为方块（单色 LCD 下与普通方块无差别）。
+export const GARBAGE = 'G'
+
 // ------------------------------------------------------------
 // SRS 墙踢（Wall Kick）偏移表
 // ------------------------------------------------------------
@@ -110,7 +113,11 @@ export const LINES_PER_LEVEL = 10
 // 消行闪烁动画时长（毫秒），动画期间冻结重力。
 export const CLEAR_ANIM_MS = 220
 
-// 起始等级（Start Line）可选范围：0 ~ 9，等级越高初始下落越快。
+// 起始行高（Start Line）可选范围：0 ~ 9 行，开局在底部预填对应数量的垃圾行。
+export const MIN_START_LINES = 0
+export const MAX_START_LINES = 9
+
+// 起始等级（Level）可选范围：0 ~ 9，等级越高初始下落越快、计分倍率越高。
 export const MIN_START_LEVEL = 0
 export const MAX_START_LEVEL = 9
 
@@ -123,5 +130,6 @@ export function dropInterval(level) {
 export const STORAGE_KEYS = {
   highScore: 'tetris.highScore',
   sound: 'tetris.sound',
+  startLines: 'tetris.startLines',
   startLevel: 'tetris.startLevel'
 }

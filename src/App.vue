@@ -34,7 +34,7 @@ function padParts(value, width) {
 }
 const maxParts = computed(() => padParts(maxScore.value, 6))
 const scoreParts = computed(() => padParts(state.score, 6)) // 本局实时得分
-const startParts = computed(() => padParts(state.startLevel, 6))
+const startParts = computed(() => padParts(state.startLines, 6)) // Start Line：起始行高
 
 // 实时时钟（HH:MM），每秒刷新一次。
 const timeStr = ref('')
@@ -44,27 +44,41 @@ function updateClock() {
   timeStr.value = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+// ---------------- 移动端整体等比缩放 ----------------
+// 掌机为固定像素布局；在小屏上按「可用宽/高」整体缩放到刚好装下（最大不超过 1，桌面端保持原样）。
+// transform:scale 会自动换算触摸坐标，按钮点击不受影响。
+const bodyRef = ref(null)
+const scale = ref(1)
+function updateScale() {
+  const el = bodyRef.value
+  if (!el) return
+  const margin = 8 // 四周留白，避免紧贴屏幕边缘
+  const sw = (window.innerWidth - margin * 2) / el.offsetWidth
+  const sh = (window.innerHeight - margin * 2) / el.offsetHeight
+  scale.value = Math.min(1, sw, sh)
+}
+
 // ---------------- 操作动作分发 ----------------
-// 游戏中执行玩法操作；待机/结束时方向键用于调节起始等级、其余键开始游戏。
+// 游戏中执行玩法操作；待机/结束时：左/右调起始行高、旋转(上)/下调起始等级、Drop(空格)开始游戏。
 function doLeft() {
   if (playing.value) game.moveLeft()
-  else if (idleOrOver.value) game.changeStartLevel(-1)
+  else if (idleOrOver.value) game.changeStartLines(-1)
 }
 function doRight() {
   if (playing.value) game.moveRight()
-  else if (idleOrOver.value) game.changeStartLevel(1)
+  else if (idleOrOver.value) game.changeStartLines(1)
 }
 function doRotate() {
   if (playing.value) game.rotate(1)
-  else if (idleOrOver.value) game.start()
+  else if (idleOrOver.value) game.changeStartLevel(1) // 待机：顶部/旋转键 = Level +
 }
 function doDown() {
   if (playing.value) game.softDrop()
-  else if (idleOrOver.value) game.start()
+  else if (idleOrOver.value) game.changeStartLevel(-1) // 待机：下键 = Level −
 }
 function doDrop() {
   if (playing.value) game.hardDrop()
-  else if (idleOrOver.value) game.start()
+  else if (idleOrOver.value) game.start() // 待机：Drop / 空格 = 开始游戏
 }
 
 // ---------------- 按钮按下视觉反馈 ----------------
@@ -78,6 +92,33 @@ function press(id, action) {
 }
 function release(id) {
   pressed[id] = false
+}
+
+// ---------------- 移动端按住连续触发（DAS）----------------
+// 触摸的 pointerdown 只触发一次，不像键盘有系统级自动重复；
+// 左/右/下需要「按住持续移动」，这里用「首次延迟 + 固定间隔」模拟 DAS 手感。
+const DAS_DELAY = 200 // 按下后首次重复前的延迟（毫秒）
+const DAS_INTERVAL = 50 // 进入重复后的触发间隔（毫秒）
+let repeatDelayTimer = 0
+let repeatIntervalTimer = 0
+
+function clearRepeat() {
+  clearTimeout(repeatDelayTimer)
+  clearInterval(repeatIntervalTimer)
+  repeatDelayTimer = 0
+  repeatIntervalTimer = 0
+}
+// 按住型按钮按下：立即执行一次，延迟后进入固定间隔重复。
+function pressRepeat(id, action) {
+  clearRepeat() // 防止上一个按住未释放（如多点触控）残留计时器
+  press(id, action)
+  repeatDelayTimer = setTimeout(() => {
+    repeatIntervalTimer = setInterval(action, DAS_INTERVAL)
+  }, DAS_DELAY)
+}
+function releaseRepeat(id) {
+  clearRepeat()
+  release(id)
 }
 
 // 将按键映射到对应的屏幕按钮 id（Ctrl+↓ 映射到硬降键）。
@@ -141,29 +182,36 @@ onMounted(() => {
   clockTimer = setInterval(updateClock, 1000)
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
+  // 首次计算缩放，并监听视口变化 / 横竖屏切换
+  updateScale()
+  window.addEventListener('resize', updateScale)
+  window.addEventListener('orientationchange', updateScale)
 })
 onUnmounted(() => {
   clearInterval(clockTimer)
+  clearRepeat() // 清理移动端按住重复计时器，避免泄漏
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
+  window.removeEventListener('resize', updateScale)
+  window.removeEventListener('orientationchange', updateScale)
 })
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-200 flex items-center justify-center p-4 select-none">
-    <!-- 掌机机身 -->
-    <div class="tetris-body">
+  <div class="h-screen bg-slate-200 flex items-center justify-center p-4 select-none overflow-hidden">
+    <!-- 掌机机身：小屏整体等比缩放（transform 缩放，居中显示） -->
+    <div ref="bodyRef" class="tetris-body" :style="{ transform: `scale(${scale})` }">
       <!-- 屏幕区：两侧方块装饰（机身黄底上）夹着黑色描边相框；相框内仅含标题条 + 灰色内框绿屏，贴合官方 -->
       <div class="screen-row">
         <BezelDecor :height="360" />
 
         <!-- 黑色描边相框：仅含顶部标题条 + 灰色内框绿屏（不含两侧装饰） -->
         <div class="bezel">
-          <!-- 顶部标题条：两侧虚线（与边框同粗、连接到上方两角）+ 居中标题，深色显示在机身黄底上 -->
+          <!-- 顶部标题条：两侧像素方块点缀 + 居中标题，深色显示在机身黄底上 -->
           <div class="title-bar">
-            <span class="title-dash"></span>
+            <span class="title-dots">■ ■ ■</span>
             <h1 class="title-text">Good Old Tetris</h1>
-            <span class="title-dash"></span>
+            <span class="title-dots">■ ■ ■</span>
           </div>
 
           <!-- 灰色立体内框：机身与绿屏之间的银灰色斜角边框 -->
@@ -271,8 +319,8 @@ onUnmounted(() => {
             <div class="btn-group">
               <button
                 class="btn-round btn-blue btn-md" :class="{ 'is-pressed': pressed.left }"
-                @pointerdown.prevent="press('left', doLeft)"
-                @pointerup="release('left')" @pointerleave="release('left')" @pointercancel="release('left')"
+                @pointerdown.prevent="pressRepeat('left', doLeft)"
+                @pointerup="releaseRepeat('left')" @pointerleave="releaseRepeat('left')" @pointercancel="releaseRepeat('left')"
               ></button>
               <span class="btn-label">Left</span>
             </div>
@@ -284,8 +332,8 @@ onUnmounted(() => {
             <div class="btn-group">
               <button
                 class="btn-round btn-blue btn-md" :class="{ 'is-pressed': pressed.right }"
-                @pointerdown.prevent="press('right', doRight)"
-                @pointerup="release('right')" @pointerleave="release('right')" @pointercancel="release('right')"
+                @pointerdown.prevent="pressRepeat('right', doRight)"
+                @pointerup="releaseRepeat('right')" @pointerleave="releaseRepeat('right')" @pointercancel="releaseRepeat('right')"
               ></button>
               <span class="btn-label">Right</span>
             </div>
@@ -294,8 +342,8 @@ onUnmounted(() => {
             <div class="btn-group">
               <button
                 class="btn-round btn-blue btn-md" :class="{ 'is-pressed': pressed.down }"
-                @pointerdown.prevent="press('down', doDown)"
-                @pointerup="release('down')" @pointerleave="release('down')" @pointercancel="release('down')"
+                @pointerdown.prevent="pressRepeat('down', doDown)"
+                @pointerup="releaseRepeat('down')" @pointerleave="releaseRepeat('down')" @pointercancel="releaseRepeat('down')"
               ></button>
               <span class="btn-label">Down</span>
             </div>
@@ -311,18 +359,18 @@ onUnmounted(() => {
 /* 机身：金黄色塑料质感 */
 .tetris-body {
   width: 460px;
-  max-width: 100%;
+  /* 保持固定宽度，小屏由外层 transform:scale 整体等比缩放适配，避免内部固定布局被压缩错乱 */
   padding: 16px;
   border-radius: 26px;
   background: linear-gradient(160deg, #ffd633 0%, #f4c30f 55%, #EFCC19 100%);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35), inset 0 2px 6px rgba(255, 255, 255, 0.5);
 }
 
-/* 标题两侧短虚线点缀：小方块短划，居中聚拢在标题两旁 */
-.title-dash {
-  width: 38px;
-  height: 6px;
-  background: repeating-linear-gradient(90deg, #141414 0 6px, transparent 6px 12px);
+/* 标题两侧像素方块点缀：与标题同为深色实心方块，居中聚拢在标题两旁 */
+.title-dots {
+  letter-spacing: 3px;
+  font-size: 11px;
+  color: #141414;
 }
 
 /* 屏幕区：左装饰列 + 黑框绿屏 + 右装饰列 横向排列 */
@@ -332,15 +380,17 @@ onUnmounted(() => {
   justify-content: center;
   gap: 6px;
 }
-/* 黑色相框：四周圆角描边（机身黄底透出），带轻微立体投影与内高光，质感更精致 */
+/* 黑色相框：四周圆角描边（机身黄底透出）。
+   通过「外部柔和投影 + 顶部内高光 + 底部内压暗」让纯黑描边读起来有塑料弧面厚度，更精致。 */
 .bezel {
   padding: 8px 14px 14px;
   background: transparent;
-  border: 6px solid #141414;
-  border-radius: 16px;
+  border: 7px solid #141414;
+  border-radius: 18px;
   box-shadow:
-    0 6px 16px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    0 5px 14px rgba(0, 0, 0, 0.30),
+    inset 0 2px 2px rgba(255, 255, 255, 0.16),
+    inset 0 -3px 4px rgba(0, 0, 0, 0.45);
 }
 
 /* 顶部标题条：居中标题，两侧短虚线点缀 */

@@ -6,6 +6,7 @@
 import { reactive, onMounted, onUnmounted } from 'vue'
 import {
   createBoard,
+  createBoardWithGarbage,
   createBag,
   spawnPiece,
   isValid,
@@ -21,14 +22,21 @@ import {
   HARD_DROP_SCORE,
   LINES_PER_LEVEL,
   CLEAR_ANIM_MS,
+  MIN_START_LINES,
+  MAX_START_LINES,
   MIN_START_LEVEL,
   MAX_START_LEVEL,
   dropInterval,
   STORAGE_KEYS
 } from './constants.js'
 
+// 单帧时间步长上限（毫秒）：标签页切回 / 长卡顿时 now-lastTime 可能极大，
+// 用它钳制 dt，避免重力一次性步进过多导致方块瞬间暴跌。
+const MAX_FRAME_DT = 100
+
 export function useTetris(audio) {
-  // 起始等级（界面中的 Start Line），从本地配置读取。
+  // 起始行高（Start Line）：开局底部预填的垃圾行数；起始等级（Level）：开局速度/计分基线。均从本地配置读取。
+  const savedStartLines = Number(localStorage.getItem(STORAGE_KEYS.startLines) || 0)
   const savedStartLevel = Number(localStorage.getItem(STORAGE_KEYS.startLevel) || 0)
 
   // ---------------- 响应式状态 ----------------
@@ -38,9 +46,10 @@ export function useTetris(audio) {
     next: null, // 下一个方块类型（预览）
     status: 'idle', // idle | playing | paused | gameover
     score: 0,
-    level: savedStartLevel, // 当前等级（待机时等于起始等级）
+    level: savedStartLevel, // 当前等级（待机时等于起始等级，游戏中每消 10 行 +1）
     lines: 0,
-    startLevel: savedStartLevel, // 可在未开始时调整并持久化
+    startLines: savedStartLines, // 起始行高，可在未开始时调整并持久化
+    startLevel: savedStartLevel, // 起始等级，可在未开始时调整并持久化
     clearing: null, // 消行动画状态 {rows:[], start:时间戳}
     highScore: Number(localStorage.getItem(STORAGE_KEYS.highScore) || 0)
   })
@@ -82,8 +91,9 @@ export function useTetris(audio) {
   }
 
   // 累加消行得分并按累计行数提升等级。
+  // 倍率用 (level + 1)：等级 0 也按 1 倍计分，避免 0 分（标准 Tetris 计分规则）。
   function applyClearScore(count) {
-    state.score += LINE_SCORES[count] * state.level
+    state.score += LINE_SCORES[count] * (state.level + 1)
     state.lines += count
     const newLevel = state.startLevel + Math.floor(state.lines / LINES_PER_LEVEL)
     if (newLevel > state.level) {
@@ -127,7 +137,7 @@ export function useTetris(audio) {
   // ---------------- 主循环（requestAnimationFrame）----------------
   function tick(now) {
     rafId = requestAnimationFrame(tick)
-    const dt = now - lastTime
+    const dt = Math.min(now - lastTime, MAX_FRAME_DT) // 钳制大跨度帧，防止重力暴跨步进
     lastTime = now
 
     if (state.status !== 'playing') return
@@ -202,14 +212,12 @@ export function useTetris(audio) {
     lock()
   }
 
-  // 开始 / 重新开始游戏（startLevel 即界面的 Start Line）。
-  function start(startLevel = state.startLevel) {
-    state.startLevel = startLevel
-    localStorage.setItem(STORAGE_KEYS.startLevel, String(startLevel))
-    state.board = createBoard()
+  // 开始 / 重新开始游戏：按起始行高预填垃圾行，按起始等级设定初速与计分基线。
+  function start() {
+    state.board = createBoardWithGarbage(state.startLines)
     state.score = 0
     state.lines = 0
-    state.level = startLevel
+    state.level = state.startLevel
     state.clearing = null
     queue = createBag()
     accumulator = 0
@@ -218,7 +226,15 @@ export function useTetris(audio) {
     spawn()
   }
 
-  // 调整起始等级（仅在未开始 / 已结束时可改），并持久化。
+  // 调整起始行高（仅在未开始 / 已结束时可改），并持久化。
+  function changeStartLines(delta) {
+    if (state.status === 'playing' || state.status === 'paused') return
+    const next = Math.min(MAX_START_LINES, Math.max(MIN_START_LINES, state.startLines + delta))
+    state.startLines = next
+    localStorage.setItem(STORAGE_KEYS.startLines, String(next))
+  }
+
+  // 调整起始等级（仅在未开始 / 已结束时可改），同步预览到当前 Level 并持久化。
   function changeStartLevel(delta) {
     if (state.status === 'playing' || state.status === 'paused') return
     const next = Math.min(MAX_START_LEVEL, Math.max(MIN_START_LEVEL, state.startLevel + delta))
@@ -237,11 +253,16 @@ export function useTetris(audio) {
     }
   }
 
-  function restart() {
-    start(state.startLevel)
+  // 标签页切到后台时若正在游戏则自动暂停，避免切回时重力暴跨步进（与 dt 钳制双保险）。
+  function handleVisibility() {
+    if (document.hidden && state.status === 'playing') togglePause()
   }
 
-  // 复位：回到待机（开机）画面，保留起始等级设置。
+  function restart() {
+    start()
+  }
+
+  // 复位：回到待机（开机）画面，保留起始行高 / 起始等级设置。
   function reset() {
     state.status = 'idle'
     state.board = createBoard()
@@ -257,13 +278,18 @@ export function useTetris(audio) {
   onMounted(() => {
     lastTime = performance.now()
     rafId = requestAnimationFrame(tick)
+    document.addEventListener('visibilitychange', handleVisibility)
   })
-  onUnmounted(() => cancelAnimationFrame(rafId))
+  onUnmounted(() => {
+    cancelAnimationFrame(rafId)
+    document.removeEventListener('visibilitychange', handleVisibility)
+  })
 
   return {
     state,
     start,
     reset,
+    changeStartLines,
     changeStartLevel,
     togglePause,
     restart,
